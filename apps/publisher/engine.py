@@ -39,7 +39,7 @@ from apps.social_accounts.error_messages import (
     friendly_publish_error,
 )
 from providers import get_provider
-from providers.exceptions import ProviderError, RateLimitError
+from providers.exceptions import ProviderError, PublishError, RateLimitError
 from providers.types import PostType, PublishContent
 
 from .models import PublishLog, RateLimitState
@@ -476,6 +476,19 @@ class PublishEngine:
             platform_extra = platform_post.platform_extra or {}
             extra.update(platform_extra)
 
+            if platform in ("instagram", "instagram_login"):
+                extra["_instagram_media_types"] = [a.media_asset.media_type for a in attachments if a.media_asset.file]
+                options = dict(extra.get("instagram_options", {}))
+                if "media_options" not in options:
+                    options["media_options"] = [
+                        {"alt_text": a.media_asset.alt_text}
+                        if a.media_asset.media_type == "image" and a.media_asset.alt_text
+                        else {}
+                        for a in attachments
+                        if a.media_asset.file
+                    ]
+                extra["instagram_options"] = options
+
             # Inject page_id for Facebook from the connected account.
             if platform == "facebook" and "page_id" not in extra:
                 extra["page_id"] = account.account_platform_id
@@ -514,9 +527,18 @@ class PublishEngine:
             # Resolve cover_image_asset_id → temp file (Pinterest video pins)
             cover_asset_id = extra.pop("cover_image_asset_id", None)
             if cover_asset_id:
+                from apps.media_library.models import MediaAsset
+
                 try:
-                    cover_asset = MediaAsset.objects.get(id=cover_asset_id)
+                    cover_asset = MediaAsset.objects.get(
+                        id=cover_asset_id, workspace_id=platform_post.post.workspace_id
+                    )
                     if cover_asset.file:
+                        if platform in ("instagram", "instagram_login"):
+                            cover_url = cover_asset.file.url
+                            extra["instagram_options"]["cover_url"] = (
+                                f"{app_url}{cover_url}" if cover_url.startswith("/") else cover_url
+                            )
                         suffix = os.path.splitext(cover_asset.filename)[1] or ".jpg"
                         tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)  # noqa: SIM115
                         temp_files.append(tmp.name)
@@ -526,6 +548,8 @@ class PublishEngine:
                         tmp.close()
                         extra["cover_image_file"] = tmp.name
                 except MediaAsset.DoesNotExist:
+                    if platform in ("instagram", "instagram_login"):
+                        raise PublishError("The approved Reel cover is unavailable.", retryable=False) from None
                     logger.warning("Cover image asset %s not found", cover_asset_id)
 
             post_type = self._resolve_post_type(

@@ -13,7 +13,9 @@ from urllib.parse import urlencode
 
 from .base import SocialProvider
 from .exceptions import APIError, OAuthError, PublishError
+from .instagram_options import container_options, media_types
 from .instagram_trials import trial_params
+from .instagram_uploads import create_media
 from .meta_comments import (
     fetch_instagram_comments,
     find_own_instagram_comment,
@@ -299,6 +301,10 @@ class InstagramProvider(SocialProvider):
 
     def publish_post(self, access_token: str, content: PublishContent) -> PublishResult:
         trial_params(content, self.platform_name)
+        try:
+            container_options(content, self.platform_name)
+        except ValueError as exc:
+            raise PublishError(str(exc), platform=self.platform_name, retryable=False) from exc
         ig_user_id = content.extra.get("ig_user_id") or self._get_ig_user_id(access_token)
 
         if content.post_type == PostType.CAROUSEL:
@@ -308,7 +314,7 @@ class InstagramProvider(SocialProvider):
     def _publish_single(self, access_token: str, ig_user_id: str, content: PublishContent) -> PublishResult:
         """Publish a single image, reel, or story."""
         params = trial_params(content, self.platform_name)
-        payload: dict = {}
+        payload: dict = container_options(content, self.platform_name)
         if params is not None:
             payload["trial_params"] = params
 
@@ -324,7 +330,7 @@ class InstagramProvider(SocialProvider):
             payload["media_type"] = "REELS"
             payload["video_url"] = content.media_urls[0]
         elif content.post_type == PostType.STORY:
-            if content.media_urls and content.media_urls[0].endswith((".mp4", ".mov")):
+            if media_types(content)[0] == "video":
                 payload["media_type"] = "STORIES"
                 payload["video_url"] = content.media_urls[0]
             else:
@@ -335,7 +341,7 @@ class InstagramProvider(SocialProvider):
             payload["image_url"] = content.media_urls[0]
 
         # Step 1: create container
-        container_id = self._create_container(access_token, ig_user_id, payload)
+        container_id = create_media(self, access_token, content, payload, ig_user_id=ig_user_id)
 
         # Step 2: wait for container to be ready
         self._wait_for_container(access_token, container_id)
@@ -347,8 +353,8 @@ class InstagramProvider(SocialProvider):
         """Publish a carousel post with multiple media items."""
         child_ids: list[str] = []
 
-        for url in content.media_urls:
-            is_video = url.lower().endswith((".mp4", ".mov"))
+        for index, url in enumerate(content.media_urls):
+            is_video = media_types(content)[index] == "video"
             child_payload: dict = {
                 "is_carousel_item": True,
             }
@@ -358,7 +364,8 @@ class InstagramProvider(SocialProvider):
             else:
                 child_payload["image_url"] = url
 
-            child_id = self._create_container(access_token, ig_user_id, child_payload)
+            child_payload.update(container_options(content, self.platform_name, index=index))
+            child_id = create_media(self, access_token, content, child_payload, index=index, ig_user_id=ig_user_id)
             self._wait_for_container(access_token, child_id)
             child_ids.append(child_id)
 
@@ -367,6 +374,7 @@ class InstagramProvider(SocialProvider):
             "media_type": "CAROUSEL",
             "children": ",".join(child_ids),
         }
+        carousel_payload.update(container_options(content, self.platform_name))
         if content.text:
             carousel_payload["caption"] = content.text
 

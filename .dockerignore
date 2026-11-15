@@ -7,3 +7,5 @@ __pycache__
 .pytest_cache
 .mypy_cache
 test_media
+
+tests/test_fieldnotes_reel_adapter.py
