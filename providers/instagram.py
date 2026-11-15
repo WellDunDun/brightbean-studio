@@ -131,7 +131,7 @@ class InstagramProvider(SocialProvider):
 
     @property
     def required_scopes(self) -> list[str]:
-        return [
+        scopes = [
             "instagram_basic",
             "instagram_content_publish",
             "instagram_manage_comments",
@@ -139,6 +139,13 @@ class InstagramProvider(SocialProvider):
             "pages_show_list",
             "pages_read_engagement",
         ]
+        optional = self.credentials.get("additional_instagram_scopes", [])
+        allowed = {"instagram_shopping_tag_products", "instagram_branded_content_creator", "business_management"}
+        if not isinstance(optional, list) or any(
+            not isinstance(scope, str) or scope not in allowed for scope in optional
+        ):
+            raise ValueError("Unrecognized additional Instagram OAuth scope.")
+        return scopes + sorted(set(optional))
 
     @property
     def rate_limits(self) -> RateLimitConfig:
