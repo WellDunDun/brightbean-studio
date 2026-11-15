@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 
 from .base import SocialProvider
 from .exceptions import APIError, OAuthError, PublishError
+from .instagram_trials import trial_params
 from .meta_comments import (
     fetch_instagram_comments,
     find_own_instagram_comment,
@@ -297,6 +298,7 @@ class InstagramProvider(SocialProvider):
     # ------------------------------------------------------------------
 
     def publish_post(self, access_token: str, content: PublishContent) -> PublishResult:
+        trial_params(content, self.platform_name)
         ig_user_id = content.extra.get("ig_user_id") or self._get_ig_user_id(access_token)
 
         if content.post_type == PostType.CAROUSEL:
@@ -305,12 +307,15 @@ class InstagramProvider(SocialProvider):
 
     def _publish_single(self, access_token: str, ig_user_id: str, content: PublishContent) -> PublishResult:
         """Publish a single image, reel, or story."""
+        params = trial_params(content, self.platform_name)
         payload: dict = {}
+        if params is not None:
+            payload["trial_params"] = params
 
         if content.text:
             payload["caption"] = content.text
 
-        if content.post_type in (PostType.REEL, PostType.VIDEO):
+        if content.post_type in (PostType.REEL, PostType.VIDEO) or params is not None:
             # Instagram no longer supports standalone feed videos: a single
             # video is published as a Reel. PostType.VIDEO (the engine's
             # fallback for a lone video asset) must take the REELS path too,

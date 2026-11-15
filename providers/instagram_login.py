@@ -20,6 +20,7 @@ from urllib.parse import urlencode
 
 from .base import SocialProvider
 from .exceptions import APIError, OAuthError, PublishError
+from .instagram_trials import trial_params
 from .meta_comments import (
     fetch_instagram_comments,
     find_own_instagram_comment,
@@ -294,6 +295,7 @@ class InstagramLoginProvider(SocialProvider):
     # ------------------------------------------------------------------
 
     def publish_post(self, access_token: str, content: PublishContent) -> PublishResult:
+        trial_params(content, self.platform_name)
         if not content.media_urls:
             raise PublishError(
                 "Instagram requires at least one media item",
@@ -305,11 +307,14 @@ class InstagramLoginProvider(SocialProvider):
         return self._publish_single(access_token, content)
 
     def _publish_single(self, access_token: str, content: PublishContent) -> PublishResult:
+        params = trial_params(content, self.platform_name)
         payload: dict = {}
+        if params is not None:
+            payload["trial_params"] = params
         if content.text:
             payload["caption"] = content.text
 
-        if content.post_type == PostType.REEL:
+        if content.post_type == PostType.REEL or params is not None:
             payload["media_type"] = "REELS"
             payload["video_url"] = content.media_urls[0]
         elif content.post_type == PostType.STORY:
