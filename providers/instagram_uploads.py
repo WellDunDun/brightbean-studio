@@ -59,6 +59,8 @@ def create_media(provider, token, content, payload, index=0, ig_user_id=None):
             if response.status_code != 200 or response.json().get("success") is not True:
                 raise ValueError("Meta did not confirm the video upload.")
         return identifier
+    except PublishError:
+        raise
     except Exception as exc:
         # Container or upload may exist. Do not let the background runner create another one automatically.
         raise PublishError(

@@ -8,7 +8,7 @@ from datetime import datetime
 
 import httpx
 
-from .exceptions import APIError, RateLimitError
+from .exceptions import APIError, PublishError, RateLimitError
 from .types import (
     AccountMetrics,
     AccountProfile,
@@ -326,11 +326,26 @@ class SocialProvider(ABC):
             )
 
         if response.status_code >= 400:
+            raw = self._safe_json(response)
+            error = raw.get("error", {}) if isinstance(raw, dict) else {}
+            if (
+                self.platform_name in ("Instagram", "Instagram (Direct)")
+                and isinstance(error, dict)
+                and error.get("code") == 10
+                and error.get("error_subcode") == 2207081
+            ):
+                raise PublishError(
+                    "Meta blocked this Trial Reel because the account does not meet its follower requirement. "
+                    "No automatic retry or ordinary-Reel fallback. Check Trial eligibility before rescheduling.",
+                    platform=self.platform_name,
+                    raw_response=raw,
+                    retryable=False,
+                )
             raise APIError(
                 f"{self.platform_name} API error {response.status_code}: {response.text[:500]}",
                 status_code=response.status_code,
                 platform=self.platform_name,
-                raw_response=self._safe_json(response),
+                raw_response=raw,
             )
 
         return response
