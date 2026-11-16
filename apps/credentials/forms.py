@@ -61,6 +61,12 @@ class PlatformCredentialAdminForm(forms.ModelForm):
         for key, value in data.items():
             if value is None:
                 continue
+            if key == "additional_instagram_scopes":
+                allowed = {"instagram_shopping_tag_products", "instagram_branded_content_creator", "business_management"}
+                if not isinstance(value, list) or any(not isinstance(scope, str) or scope not in allowed for scope in value):
+                    raise forms.ValidationError("Additional Instagram scopes must be a JSON array of supported scope names.")
+                cleaned[key] = list(value)
+                continue
             text = value if isinstance(value, str) else str(value)
             if text.strip():
                 cleaned[key] = text
