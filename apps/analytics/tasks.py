@@ -308,6 +308,11 @@ def _write_account_snapshot(
 
     if not metric_values:
         return 0
+    from .trial_checkpoints import is_tracked, retain
+    if is_tracked(post):
+        type(post).objects.select_for_update().get(pk=post.pk)
+        previous = PostInsightsSnapshot.objects.filter(platform_post=post).order_by("-captured_at").first()
+        raw = retain(post.pk, post.published_at, raw, previous.raw if previous else {}, timezone.now(), errors, tracked=True)
     count = 0
     for key, value in metric_values.items():
         AccountInsightsSnapshot.objects.update_or_create(
@@ -320,6 +325,7 @@ def _write_account_snapshot(
     return count
 
 
+@transaction.atomic
 def _write_post_snapshot(
     post,
     metric_values: dict[str, float],
@@ -618,6 +624,11 @@ def _post_cadence_due(post, now=None, *, platform: str | None = None) -> bool:
     if cadence is None:
         return False  # past the 90-day horizon.
     qs = PostInsightsSnapshot.objects.filter(platform_post=post)
+    from .trial_checkpoints import is_tracked, due
+    if is_tracked(post):
+        latest = qs.order_by("-captured_at").first()
+        if due(post.pk, post.published_at, latest.raw if latest else {}, now, tracked=True):
+            return True
     platform = platform or post.social_account.platform
     excluded = _POST_NON_CADENCE_METRICS_BY_PLATFORM.get(platform)
     if excluded:

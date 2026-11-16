@@ -500,7 +500,8 @@ class InstagramProvider(SocialProvider):
             platform=self.platform_name,
             endpoint=f"{BASE_URL}/{post_id}/insights",
             access_token=access_token,
-            metrics=INSTAGRAM_MEDIA_INSIGHTS,
+            metrics=INSTAGRAM_MEDIA_INSIGHTS + (["ig_reels_avg_watch_time", "ig_reels_video_view_total_time", "profile_visits", "follows"]
+                if fields.get("media_product_type") == "REELS" else []),
             endpoint_type="media",
         )
         likes = values.get("likes", fields.get("like_count", 0))
