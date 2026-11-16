@@ -92,3 +92,21 @@ def test_parse_insights_response_prefers_lifetime_when_metric_name_repeats():
         "post_media_view": 32741,
         "post_total_media_view_unique": 21105,
     }
+
+
+def test_unsupported_metric_oauth_exception_type_does_not_discard_other_metrics():
+    error = APIError("Meta error: OAuthException", status_code=400,
+                     raw_response={"error": {"code": 100, "type": "OAuthException",
+                     "message": "The Media Insights API does not support the profile_visits metric for this media product type."}})
+    request = MagicMock(side_effect=[error, _resp({"data": [{"name": "views", "values": [{"value": 10}]}]})])
+    values, errors = fetch_insights_safe(request, platform="Instagram", endpoint="https://example.com/insights",
+                                        access_token="fixture", metrics=["profile_visits", "views"])
+    assert values == {"views": 10}
+    assert set(errors) == {"profile_visits"}
+
+
+def test_structured_missing_permission_still_blocks_even_with_code_100():
+    from providers.meta_insights import is_meta_permission_error
+    error = APIError("Meta error", status_code=400, raw_response={"error": {
+        "code": 100, "type": "OAuthException", "message": "Missing permission: instagram_manage_insights is required."}})
+    assert is_meta_permission_error(error)

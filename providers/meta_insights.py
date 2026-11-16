@@ -53,9 +53,8 @@ def is_meta_permission_error(exc: APIError) -> bool:
         str(value)
         for value in (
             error.get("message"),
-            error.get("type"),
             error.get("error_user_msg"),
-            exc,
+            exc if not error.get("message") and not error.get("error_user_msg") else None,
         )
         if value
     ).lower()

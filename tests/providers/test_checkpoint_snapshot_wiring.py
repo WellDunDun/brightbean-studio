@@ -30,3 +30,13 @@ class SnapshotWiringTests(unittest.TestCase):
         self.assertEqual(saved["24h"], previous["trial_checkpoints"]["24h"])
         self.assertEqual(saved["48h"]["counts"]["reach"], 10)
         post.objects.select_for_update.return_value.get.assert_called_once_with(pk="fixture")
+
+    def test_explicit_instagram_zero_is_retained_but_missing_watch_is_unknown(self):
+        from apps.analytics.tasks import _post_metrics_to_dict
+        from providers.types import PostMetrics
+        result = _post_metrics_to_dict(PostMetrics(extra={"raw_insights": {"views": 0, "reach": 0},
+                     "insight_errors": {"profile_visits": "unsupported"}}), "instagram")
+        self.assertEqual(result["views"], 0)
+        self.assertEqual(result["reach"], 0)
+        self.assertNotIn("avg_watch_ms", result)
+        self.assertNotIn("profile_visits", result)

@@ -185,6 +185,22 @@ def _post_metrics_to_dict(metrics, platform: str) -> dict[str, float]:
         if v is not None:
             with contextlib.suppress(TypeError, ValueError):
                 out[dest_key] = float(v)
+    if platform in {"instagram", "instagram_login"}:
+        observed = extra.get("raw_insights", {}) or {}
+        errors = extra.get("insight_errors", {}) or {}
+        for native, key in (("views", "views"), ("reach", "reach"), ("likes", "likes"),
+                            ("comments", "comments"), ("saved", "saves"), ("shares", "shares"),
+                            ("ig_reels_avg_watch_time", "avg_watch_ms"),
+                            ("ig_reels_video_view_total_time", "total_watch_ms"),
+                            ("profile_visits", "profile_visits"), ("follows", "follows")):
+            value = observed.get(native)
+            if native not in errors and type(value) in (int, float) and value >= 0:
+                out[key] = float(value)
+        fields = extra.get("raw_fields", {}) or {}
+        for native, key in (("like_count", "likes"), ("comments_count", "comments")):
+            value = fields.get(native)
+            if type(value) is int and value >= 0:
+                out.setdefault(key, float(value))
     from .metrics import PLATFORM_METRICS
 
     if "engagement" in PLATFORM_METRICS.get(platform, []):
