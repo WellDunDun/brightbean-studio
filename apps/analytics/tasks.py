@@ -308,11 +308,6 @@ def _write_account_snapshot(
 
     if not metric_values:
         return 0
-    from .trial_checkpoints import is_tracked, retain
-    if is_tracked(post):
-        type(post).objects.select_for_update().get(pk=post.pk)
-        previous = PostInsightsSnapshot.objects.filter(platform_post=post).order_by("-captured_at").first()
-        raw = retain(post.pk, post.published_at, raw, previous.raw if previous else {}, timezone.now(), errors, tracked=True)
     count = 0
     for key, value in metric_values.items():
         AccountInsightsSnapshot.objects.update_or_create(
@@ -338,6 +333,11 @@ def _write_post_snapshot(
 
     if not metric_values:
         return 0
+    from .trial_checkpoints import is_tracked, retain
+    if is_tracked(post):
+        type(post).objects.select_for_update().get(pk=post.pk)
+        previous = PostInsightsSnapshot.objects.filter(platform_post=post).order_by("-captured_at").first()
+        raw = retain(post.pk, post.published_at, raw, previous.raw if previous else {}, timezone.now(), errors, tracked=True)
     count = 0
     for key, value in metric_values.items():
         PostInsightsSnapshot.objects.update_or_create(
